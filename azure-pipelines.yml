@@ -10,19 +10,14 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
- - name: RLSECURE_DIR
-   value: ./RLSecure
- - name: PACKAGE_URL
-   value: Apache/struts2-showcase@2.5.28
  - name: ARTIFACT2SCAN
-   value: ./target/struts2-showcase.war
+   value: struts2-showcase.war
  - name: REPORT_PATH
    value: RLSecure
 
 steps:
 - task: Maven@3
   displayName: 'Build'
-
   inputs:
     mavenPomFile: 'pom.xml'
     mavenOptions: '-Xmx2048m'
@@ -33,74 +28,38 @@ steps:
     testResultsFiles: '**/surefire-reports/TEST-*.xml'
     goals: 'package'
 
-- task: UsePythonVersion@0
-  displayName: 'Python Setup'
-  inputs:
-    versionSpec: '3.x'
-    addToPath: true
-    architecture: 'x64'
-
 - bash: |
-    # prepare
-    python -m pip install --upgrade pip
-    #
-    # install rl-deploy and install rl-secure
-    pip install rl-deploy
-    rl-deploy --version
-    #
-    # install rl-secure
-    rl-deploy install $(RLSECURE_DIR) \
-      --encoded-key=$(RLSECURE_ENCODED_LICENSE) \
-      --site-key=$(RLSECURE_SITE_KEY) \
-      --no-tracking
-    $(RLSECURE_DIR)/rl-secure init \
-      -s $(RLSECURE_DIR)
-    ${RLSECURE_DIR}/rl-secure \
-      --version
-    #
-    # run a scan on a artifact, report and report status
-    mkdir -p ./$(REPORT_PATH)
-    $(RLSECURE_DIR)/rl-secure scan $(ARTIFACT2SCAN) \
-      -s $(RLSECURE_DIR) \
-      -p $(PACKAGE_URL)
-      --keep-reference \
-      --no-tracking
-    $(RLSECURE_DIR)/rl-secure report \
-      -s $(RLSECURE_DIR) \
-      -p $(PACKAGE_URL) \
-      --format all \
-      --output-path ./$(REPORT_PATH)
-    # report status and exit code
-    $(RLSECURE_DIR)/rl-secure status \
-      -s $(RLSECURE_DIR) \
-      -p $(PACKAGE_URL) \
-      --return-status
-  displayName: 'RL Scan'
+    mkdir -p $(REPORT_PATH)
+    docker pull reversinglabs/rl-scanner:latest
+    docker run --rm -u $(id -u):$(id -g) \
+      -e RLSECURE_ENCODED_LICENSE=$(RLSECURE_ENCODED_LICENSE) \
+      -e RLSECURE_SITE_KEY=$(RLSECURE_SITE_KEY) \
+      -v $(System.DefaultWorkingDirectory)/target:/packages:ro \
+      -v $(System.DefaultWorkingDirectory)/$(REPORT_PATH):/report \
+      reversinglabs/rl-scanner:latest \
+        rl-scan \
+          --package-path=/packages/$(ARTIFACT2SCAN) \
+          --report-path=/report \
+          --report-format=all
+  displayName: 'RL scan via Docker image'
 
-- task: PublishPipelineArtifact@1
-  condition: succeededOrFailed()
+- publish: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.cyclonedx.json
   displayName: 'Publish CycloneDX'
-  inputs:
-    targetPath: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.cyclonedx.json
-    artifactName: CycloneDX-SBOM
-
-- task: PublishPipelineArtifact@1
+  artifact: 'CycloneDX-SBOM'
   condition: succeededOrFailed()
+
+- publish: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.spdx.json
   displayName: 'Publish SPDX'
-  inputs:
-    targetPath: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.spdx.json
-    artifactName: SPDX-SBOM
-
-- task: PublishPipelineArtifact@1
+  artifact: 'SPDX-SBOM'
   condition: succeededOrFailed()
+
+- publish: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.rl.json
   displayName: 'Publish RL-json'
-  inputs:
-    targetPath: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/report.rl.json
-    artifactName: ReversingLabs-JSONreport
-
-- task: PublishPipelineArtifact@1
+  artifact: ReversingLabs-JSONreport
   condition: succeededOrFailed()
-  displayName: 'Publish RL HTML report'
-  inputs:
-    targetPath: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/rl-html
-    artifactName: ReversingLabs-HTMLreport
+
+- publish: $(System.DefaultWorkingDirectory)/$(REPORT_PATH)/rl-html
+  displayName: 'Publish RL-HTML'
+  artifact: ReversingLabs-HTMLreport
+  condition: succeededOrFailed()
+
