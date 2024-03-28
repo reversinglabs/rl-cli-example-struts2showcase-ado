@@ -1,9 +1,9 @@
 # ReversingLabs rl-secure Azure DevOps (ADO) Examples
 
 This repository contains working examples of Azure DevOps (ADO) pipeline scripts to illustrate scanning with the
-[ReversingLabs secure.software CLI](https://docs.secure.software/cli/).
+[ReversingLabs Spectra Assure CLI](https://docs.secure.software/cli/).
 
-ReversingLabs secure.software CLI is capable of scanning
+ReversingLabs Spectra Assure CLI is capable of scanning
 [nearly any type](https://docs.secure.software/concepts/language-coverage)
 of software artifact or package that results from a build.
 
